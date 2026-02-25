@@ -48,7 +48,7 @@ We evaluate against six baselines (single-domain models, projection heads, gradi
 \section{Introduction}
 \label{sec:intro}
 
-People express themselves differently across contexts. A dating profile foregrounds personality, values, and lifestyle; a resume foregrounds skills, experience, and professional demeanor. Yet both documents are authored by the same person, and aspects of identity---communication style, personality traits, core values---leak through regardless of domain. Can we learn embeddings that capture this?
+People express themselves differently across contexts. A dating profile foregrounds personality, values, and lifestyle; a resume foregrounds skills, experience, and professional demeanor. Yet both documents are authored by the same person, and aspects of how they present themselves---word choice, communication style, the way they frame priorities---leak through regardless of domain. Can we learn embeddings that capture this shared signal?
 
 We formalize this as \emph{cross-domain text identity matching}: given a text from domain $A$ (e.g., dating) and a gallery of texts from domain $B$ (e.g., hiring), retrieve the text authored by the same person. This task has practical applications in cross-platform user linking, fraud detection, and recommendation, but has received almost no attention in the text domain. Prior cross-domain identity work focuses on vision (person re-identification across cameras \citep{wang2019learning}) or graph structure (user identity linkage across social networks \citep{shu2017user}).
 
@@ -189,9 +189,12 @@ We compare against six alternatives:
 We generate 1{,}000 synthetic people, each with structured attributes:
 
 \begin{itemize}
-  \item \textbf{Domain-invariant traits}: Big Five personality scores (Gaussian, 0--100), core values, MBTI (correlated with Big Five), communication style, attachment style.
+  \item \textbf{Cross-domain traits}: Big Five personality scores (Gaussian, 0--100), core values, MBTI (correlated with Big Five), communication style, attachment style.
   \item \textbf{Domain-specific attributes}: For dating---interests, dealbreakers, lifestyle preferences, relationship goals. For hiring---skills, industry, seniority, work style.
 \end{itemize}
+
+\paragraph{A note on identity proxies.}
+We do not claim that Big Five scores or MBTI types are \emph{true} domain-invariant features of human identity. Personality psychology provides useful heuristics for generating synthetic people with internally coherent attributes, but any trait taxonomy is an imperfect approximation of the latent structure underlying human self-presentation \citep{block1995contrarian,mccrae2008big5limits}. Our experiment tests whether an encoder can learn to align \emph{whatever} shared signal exists between two domains---the model receives only rendered text, never raw trait scores. If the cross-domain contrastive loss succeeds, it is because the generated texts contain recoverable stylistic and semantic regularities, not because Big Five is ground truth.
 
 Each person's attributes are rendered into two natural-language texts using 8 diverse templates per domain (16 total), rotated by person ID to ensure lexical diversity. Templates range from casual to formal, personality-led to skills-first.
 
@@ -205,9 +208,9 @@ We mine 5{,}000 semi-hard triplets per domain using compatibility scoring functi
   \item \textbf{Prefix size}: $K = 64$
   \item \textbf{Matryoshka dims}: $\mathcal{M} = \{32, 64, 128, 256, 384\}$
   \item \textbf{Temperature}: $\tau = 0.07$
-  \item \textbf{Optimizer}: AdamW, learning rate $2 \times 10^{-5}$, OneCycleLR with warmup
-  \item \textbf{Batch size}: 64
-  \item \textbf{Epochs}: 20
+  \item \textbf{Optimizer}: AdamW, learning rate $2 \times 10^{-5}$, linear warmup + cosine decay
+  \item \textbf{Batch size}: 16
+  \item \textbf{Epochs}: 10
   \item \textbf{Loss weights}: $\lambda_{\text{within}} = 1.0$, $\lambda_{\text{cross}} = 1.0$
 \end{itemize}
 
@@ -256,9 +259,14 @@ TMRL \citep{tmrl2026} independently demonstrates that matryoshka prefix dimensio
 \paragraph{Limitations.}
 Our benchmark uses synthetic data. While this gives us ground-truth identity labels that are impossible to obtain at scale with real data, synthetic profiles may not capture the full complexity of real human self-presentation. The dating and hiring templates, while diverse (16 total), are still templates. LLM-based paraphrasing \citep{dai2023auggpt} would improve naturalness.
 
+More fundamentally, our synthetic people are generated from structured trait taxonomies (Big Five, MBTI) that are themselves imperfect models of human personality. Real identity is richer, more contextual, and less neatly decomposable than any trait inventory suggests. Our experiment demonstrates a \emph{method}---prefix-targeted cross-domain contrastive alignment---not a claim about the structure of human identity. The method should generalize to any setting where the same entity produces semantically different texts across domains, regardless of the generative process.
+
 The base model (33M parameters) is deliberately small for rapid experimentation. Scaling to larger encoders (e.g., BGE-large, 335M) may change the relative performance of methods.
 
 We evaluate on two domains. Extending to three or more domains (e.g., dating, hiring, social media) would test whether the prefix can serve as a universal identity anchor.
+
+\paragraph{Connection to embedding translation.}
+Our work is conceptually related to the embedding model upgrade problem, where adapters translate between old and new embedding spaces \citep{vejendla2025drift}. Both settings involve learning a mapping between two embedding spaces that encode overlapping but not identical information. The key difference is that model upgrade translation operates between spaces with the same semantic function (retrieval) but different parameterizations, while our cross-domain prefix alignment operates between spaces with different semantic functions (dating vs.\ hiring) but shared underlying entities. Local drift-adapters that specialize by region \citep{dan2020cluster} are particularly relevant: our matryoshka prefix is, in effect, a ``region'' of the embedding where the cross-domain mapping is enforced to be identity.
 
 \paragraph{Broader impact.}
 Cross-domain identity matching raises privacy concerns: the ability to link someone's dating profile to their resume is precisely the kind of de-anonymization that users may not consent to. We emphasize that our benchmark is fully synthetic and that deployment of such technology on real data requires careful ethical consideration and consent frameworks.
