@@ -49,7 +49,7 @@ class LossConfig(BaseModel):
 
 class TrainingConfig(BaseModel):
     epochs: int = 20
-    batch_size: int = 64
+    batch_size: int = 16
     lr: float = 2e-5
     weight_decay: float = 0.01
     warmup_ratio: float = 0.1
