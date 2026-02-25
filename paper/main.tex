@@ -1,0 +1,277 @@
+% !TEX program = pdflatex
+\documentclass[11pt]{article}
+
+% --- Packages ---
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{natbib}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{xcolor}
+\usepackage{subcaption}
+
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newcommand{\prefix}{\mathbf{e}_{1:K}}
+\newcommand{\full}{\mathbf{e}_{1:D}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\loss}{\mathcal{L}}
+
+\title{Shared Matryoshka Embeddings:\\Cross-Domain Prefix Alignment for Text-Based Identity Matching}
+
+\author{
+  Jonathan Politzki \\
+  % \texttt{email@example.com}
+}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ============================================================================
+\begin{abstract}
+We address a new task: matching the same person across semantically heterogeneous text domains---such as linking a dating profile to a professional resume---using a single shared encoder.
+Our approach fine-tunes a sentence transformer with matryoshka representation learning (MRL), adding a cross-domain contrastive loss applied exclusively to the embedding prefix (first $K$ dimensions).
+This encourages the prefix to encode domain-invariant identity while remaining dimensions specialize per domain.
+The structural idea of training different dimension ranges for different purposes is established in face recognition \citep{shi2020universal} and, concurrently, in temporal retrieval \citep{tmrl2026}.
+Our contribution is applying this principle---via prefix-targeted InfoNCE---to cross-domain text identity matching, a task with no prior benchmark.
+We evaluate against six baselines (single-domain models, projection heads, gradient reversal, MSE prefix, no-prefix ablation) on a synthetic dataset of 1{,}000 people with paired dating profiles and resumes.
+% Results will be added after experiments.
+\end{abstract}
+
+% ============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+People express themselves differently across contexts. A dating profile foregrounds personality, values, and lifestyle; a resume foregrounds skills, experience, and professional demeanor. Yet both documents are authored by the same person, and aspects of identity---communication style, personality traits, core values---leak through regardless of domain. Can we learn embeddings that capture this?
+
+We formalize this as \emph{cross-domain text identity matching}: given a text from domain $A$ (e.g., dating) and a gallery of texts from domain $B$ (e.g., hiring), retrieve the text authored by the same person. This task has practical applications in cross-platform user linking, fraud detection, and recommendation, but has received almost no attention in the text domain. Prior cross-domain identity work focuses on vision (person re-identification across cameras \citep{wang2019learning}) or graph structure (user identity linkage across social networks \citep{shu2017user}).
+
+Our approach builds on two established ideas:
+
+\paragraph{Matryoshka representation learning.} MRL \citep{kusupati2022matryoshka} trains a single encoder so that every prefix of the embedding vector is independently useful, creating a coarse-to-fine information hierarchy. All prefixes serve the same task at different fidelities.
+
+\paragraph{Dimension-level functional partitioning.} \citet{shi2020universal} showed that different contiguous sub-vectors of a single face embedding can be trained with different losses to handle different factors of variation. \citet{sanakoyeu2019divide} partitioned embedding dimensions across separate metric learners. \citet{browatzki2019robust} split a single face embedding into sub-vectors for pose, identity, expression, and style.
+
+We combine these ideas for a new purpose: we train the prefix dimensions ($\mathbf{e}_{1:K}$) to be domain-invariant via cross-domain InfoNCE, while the full embedding ($\mathbf{e}_{1:D}$) is trained with standard matryoshka InfoNCE for within-domain discriminative power. The result is a single shared encoder where the prefix serves as a cross-domain identity bridge and the full vector preserves domain-specific quality.
+
+Concurrent work by \citet{tmrl2026} independently applies this structural principle to temporal retrieval, allocating the first $t$ dimensions as a temporal subspace. \citet{dame2026} repurpose MRL prefixes for duration-aware speaker verification. Our work differs in objective (cross-domain identity alignment via contrastive loss across heterogeneous text domains) and in the target modality (text).
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item We introduce \emph{cross-domain text identity matching} as a task and provide a synthetic benchmark with paired dating profiles and resumes for 1{,}000 people.
+  \item We propose training the matryoshka prefix with cross-domain InfoNCE (\emph{PrefixInfoNCE}) to create a domain-invariant identity subspace within a shared text encoder.
+  \item We compare against six baselines in a controlled ablation study, isolating the contribution of the prefix loss, the contrastive formulation, and the shared encoder architecture.
+\end{enumerate}
+
+% ============================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Matryoshka Representation Learning}
+
+\citet{kusupati2022matryoshka} introduced MRL, training embeddings so that any prefix of $m$ dimensions is a valid, useful representation. The training loss aggregates a task loss (e.g., cross-entropy or InfoNCE) computed at multiple nested truncation points. This creates an implicit coarse-to-fine hierarchy: early dimensions encode broad semantics, later dimensions add fine detail. MRL has been widely adopted (OpenAI text-embedding-3, Nomic Embed, BAAI BGE) and extended to two-dimensional nesting over layers and dimensions \citep{li2024starbucks}, post-hoc adaptation of black-box embeddings \citep{yoon2024matryoshka}, and compression with reduced gradient variance \citep{zhang2025smec}.
+
+Critically, in standard MRL all prefix sizes serve the \emph{same} task at different fidelities. No prior MRL work assigns different \emph{functional roles} to different dimension ranges.
+
+\subsection{Dimension-Level Functional Partitioning}
+
+The idea of training different dimension ranges of a single embedding for different purposes is established, primarily in face recognition:
+
+\citet{shi2020universal} split a 512-dim face embedding into 16 contiguous 32-dim sub-embeddings and applied variation-specific losses to different partitions, making some sub-vectors robust to occlusion and others to pose changes. \citet{browatzki2019robust} partitioned a 99-dim face embedding into four sub-vectors for pose, identity, expression, and style. \citet{sanakoyeu2019divide} assigned groups of embedding dimensions to separate metric learners.
+
+Outside face recognition, \citet{ridnik2018learning} proposed the F-statistic loss to encourage dimension-subset specialization without pre-assigning roles. \citet{lete2020an2vec} partitioned a GCN-VAE embedding into dimension ranges for structure-only, feature-only, and shared reconstruction objectives.
+
+Our work extends this principle from vision to text, and from learned or manually assigned roles to a \emph{domain-invariant identity} role enforced by cross-domain contrastive loss.
+
+\subsection{Matryoshka Prefix as Functional Subspace}
+
+Very recent concurrent work has begun combining MRL's prefix structure with explicit functional roles:
+
+\citet{tmrl2026} allocate the first $t$ dimensions of a matryoshka embedding as a ``temporal subspace'' encoding time-related information, with a dedicated temporal contrastive loss. A separate temporal projector injects temporal features into the prefix. This is the closest structural precedent to our approach within the matryoshka framework; the key difference is that we train the prefix for cross-domain identity alignment (via InfoNCE across domains) rather than temporal encoding.
+
+\citet{dame2026} train matryoshka speaker embeddings where different prefix sizes are supervised with utterances of different durations, repurposing the nesting structure for duration-aware learning. \citet{jung2024mvec} show empirically that speaker identity concentrates in small matryoshka prefixes (16 dimensions suffice for sub-3\% EER).
+
+\subsection{Shared-Private Representation Decomposition}
+
+Separating domain-invariant from domain-specific information is a foundational goal in domain adaptation, but prior work typically uses \emph{separate encoder branches} rather than dimension partitioning within a single vector.
+
+Domain Separation Networks \citep{bousmalis2016domain} use three encoders (shared, private source, private target) with orthogonality constraints. DIVA \citep{ilse2020diva} maintains three separate inference networks. DMVAE \citep{lee2021private} structures the latent vector as $[\mathbf{z}_{\text{priv}_1}, \mathbf{z}_{\text{shared}}, \mathbf{z}_{\text{priv}_2}}]$ but generates each segment from a separate encoder.
+
+Projection-based approaches decompose a single vector via mathematical operations: OE-CNN \citep{wang2018orthogonal} uses spherical coordinates to separate identity (angular) from age (radial); DAL \citep{wang2019decorrelated} uses batch CCA. These operate on the full vector through projections rather than partitioning by dimension index.
+
+\citet{ganin2016domain} introduced domain-adversarial training with gradient reversal, making the \emph{entire} representation domain-invariant. Our adversarial baseline adopts this approach but applies it only to the prefix dimensions.
+
+\subsection{Cross-Domain Identity Matching}
+
+The closest existing benchmarks are the PAN shared tasks on cross-genre authorship verification \citep{pan2020overview}, which test whether two texts from different genres were written by the same author. However, PAN addresses relatively similar text genres (essays, emails, memos), not radically different domains like dating profiles and resumes.
+
+User identity linkage across social networks \citep{shu2017user} primarily relies on graph structure and username features rather than text content. Cross-domain recommendation uses personality traits (Big Five) as domain-invariant transfer features \citep{zheng2020cross}, but for item recommendation, not identity matching. Person re-identification is almost exclusively visual \citep{wang2019learning}.
+
+To our knowledge, no prior work addresses text-based cross-domain identity matching where the same person's texts come from semantically heterogeneous domains.
+
+% ============================================================================
+\section{Method}
+\label{sec:method}
+
+\subsection{Problem Setup}
+
+Let $\mathcal{P} = \{p_1, \ldots, p_N\}$ be a set of people. Each person $p_i$ has a text representation in domain $A$ (dating), denoted $x_i^A$, and domain $B$ (hiring), denoted $x_i^B$. Given a query $x_i^A$, the task is to retrieve $x_i^B$ from the gallery $\{x_1^B, \ldots, x_N^B\}$.
+
+\subsection{Shared Matryoshka Encoder}
+
+We fine-tune a single sentence transformer $f_\theta$ that maps any text $x$ to an embedding $\mathbf{e} = f_\theta(x) \in \R^D$. The encoder is shared across both domains---there are no domain-specific parameters.
+
+Following MRL \citep{kusupati2022matryoshka}, we define a set of matryoshka dimensions $\mathcal{M} = \{m_1, \ldots, m_L\}$ (e.g., $\{32, 64, 128, 256, 384\}$). For any $m \in \mathcal{M}$, the truncated embedding $\mathbf{e}_{1:m}$ is trained to be independently useful.
+
+We designate the first $K$ dimensions as the \emph{identity prefix}: $\prefix = \mathbf{e}_{1:K}$, where $K \in \mathcal{M}$ (we use $K = 64$).
+
+\subsection{Training Objectives}
+
+The total loss combines two terms:
+
+\begin{equation}
+  \loss_{\text{total}} = \lambda_{\text{within}} \cdot \loss_{\text{within}} + \lambda_{\text{cross}} \cdot \loss_{\text{cross}}
+\end{equation}
+
+\paragraph{Within-domain matryoshka InfoNCE ($\loss_{\text{within}}$).}
+For a triplet $(a, p, n)$ from one domain, we compute InfoNCE at each matryoshka dimension:
+
+\begin{equation}
+  \loss_{\text{within}} = \frac{1}{|\mathcal{M}|} \sum_{m \in \mathcal{M}} \loss_{\text{InfoNCE}}(\mathbf{a}_{1:m},\; \mathbf{p}_{1:m},\; \{\mathbf{n}_{1:m}\})
+\end{equation}
+
+where $\loss_{\text{InfoNCE}}$ uses in-batch negatives with temperature $\tau$:
+
+\begin{equation}
+  \loss_{\text{InfoNCE}}(\mathbf{a}, \mathbf{p}, \{\mathbf{n}_j\}) = -\log \frac{\exp(\text{sim}(\mathbf{a}, \mathbf{p}) / \tau)}{\exp(\text{sim}(\mathbf{a}, \mathbf{p}) / \tau) + \sum_j \exp(\text{sim}(\mathbf{a}, \mathbf{n}_j) / \tau)}
+\end{equation}
+
+Training alternates between dating and hiring triplets.
+
+\paragraph{Cross-domain PrefixInfoNCE ($\loss_{\text{cross}}$).}
+For a cross-domain pair where person $i$ has dating text $x_i^A$ and hiring text $x_i^B$, we compute InfoNCE \emph{only on the prefix dimensions}:
+
+\begin{equation}
+  \loss_{\text{cross}} = \loss_{\text{InfoNCE}}\!\left(f_\theta(x_i^A)_{1:K},\; f_\theta(x_i^B)_{1:K},\; \{f_\theta(x_j^B)_{1:K}\}_{j \neq i}\right)
+  \label{eq:prefix_infonce}
+\end{equation}
+
+This is the key training signal: it forces the first $K$ dimensions to produce similar representations for the same person across domains, while using in-batch negatives from different people for discrimination.
+
+\subsection{Why Prefix InfoNCE, Not MSE}
+
+A simpler alternative would be to minimize MSE between cross-domain prefixes: $\loss_{\text{MSE}} = \| f_\theta(x_i^A)_{1:K} - f_\theta(x_i^B)_{1:K} \|^2$. We include this as an ablation (\texttt{v3\_mse}) and expect it to cause representation collapse, as MSE encourages all prefixes to converge to a single point rather than maintaining discriminative structure. InfoNCE explicitly requires that the correct match be more similar than in-batch negatives, preserving variance.
+
+\subsection{Baseline Methods}
+
+We compare against six alternatives:
+
+\begin{enumerate}
+  \item \textbf{Single-domain models} (\texttt{single\_dating}, \texttt{single\_hiring}): MRL-trained encoders on one domain only. No cross-domain signal. Upper bound for within-domain performance.
+  \item \textbf{No prefix loss} (\texttt{v3\_no\_prefix}): Shared encoder trained with within-domain MRL on both domains, but no cross-domain prefix loss. Tests whether joint training alone induces alignment.
+  \item \textbf{MSE prefix} (\texttt{v3\_mse}): Replace PrefixInfoNCE with PrefixMSE. Tests contrastive vs.\ direct regression.
+  \item \textbf{Projection heads} (\texttt{projection\_heads}): Shared backbone with separate identity and task projection heads \citep{chen2020simple}. The identity head is trained with cross-domain InfoNCE.
+  \item \textbf{Adversarial} (\texttt{adversarial}): Gradient reversal layer \citep{ganin2016domain} on the prefix, training a domain classifier to fail at distinguishing dating from hiring prefix embeddings.
+\end{enumerate}
+
+% ============================================================================
+\section{Experimental Setup}
+\label{sec:experiments}
+
+\subsection{Synthetic Data}
+
+We generate 1{,}000 synthetic people, each with structured attributes:
+
+\begin{itemize}
+  \item \textbf{Domain-invariant traits}: Big Five personality scores (Gaussian, 0--100), core values, MBTI (correlated with Big Five), communication style, attachment style.
+  \item \textbf{Domain-specific attributes}: For dating---interests, dealbreakers, lifestyle preferences, relationship goals. For hiring---skills, industry, seniority, work style.
+\end{itemize}
+
+Each person's attributes are rendered into two natural-language texts using 8 diverse templates per domain (16 total), rotated by person ID to ensure lexical diversity. Templates range from casual to formal, personality-led to skills-first.
+
+\paragraph{Training data.}
+We mine 5{,}000 semi-hard triplets per domain using compatibility scoring functions and 5{,}000 cross-domain pairs (same person = positive, 15 random others = negatives). Train/validation split is 85\%/15\% by person ID.
+
+\subsection{Model and Training Details}
+
+\begin{itemize}
+  \item \textbf{Base model}: BAAI/bge-small-en-v1.5 (33M parameters, $D = 384$)
+  \item \textbf{Prefix size}: $K = 64$
+  \item \textbf{Matryoshka dims}: $\mathcal{M} = \{32, 64, 128, 256, 384\}$
+  \item \textbf{Temperature}: $\tau = 0.07$
+  \item \textbf{Optimizer}: AdamW, learning rate $2 \times 10^{-5}$, OneCycleLR with warmup
+  \item \textbf{Batch size}: 64
+  \item \textbf{Epochs}: 20
+  \item \textbf{Loss weights}: $\lambda_{\text{within}} = 1.0$, $\lambda_{\text{cross}} = 1.0$
+\end{itemize}
+
+\subsection{Evaluation Metrics}
+
+\begin{enumerate}
+  \item \textbf{Cross-domain accuracy} (primary): Given each person's dating prefix, retrieve the correct hiring prefix. Report top-1 accuracy and margin (correct similarity minus best wrong similarity).
+  \item \textbf{Identity retrieval}: Recall@1, Recall@5, Recall@10, and MRR on cross-domain prefix matching.
+  \item \textbf{Within-domain triplet accuracy}: Fraction of triplets where the positive is closer than the negative (full embedding). Must not degrade relative to single-domain baselines.
+  \item \textbf{CKA across dimensions}: Linear Centered Kernel Alignment \citep{kornblith2019similarity} between dating and hiring embeddings at each matryoshka dimension. We expect high CKA at the prefix ($K = 64$) and declining CKA at larger dimensions.
+  \item \textbf{Prefix variance}: Trace of the covariance matrix of prefix embeddings. Near-zero indicates representation collapse (\texttt{v3\_mse} expected to collapse).
+\end{enumerate}
+
+% ============================================================================
+\section{Results}
+\label{sec:results}
+
+% Placeholder for experimental results.
+\textit{Results will be populated after training experiments are complete.}
+
+% Expected structure:
+% - Table 1: Main comparison across all 7 methods on all metrics
+% - Figure 1: CKA curves across matryoshka dimensions for each method
+% - Figure 2: t-SNE of prefix space showing cross-domain clustering
+% - Table 2: Ablation on prefix size K
+
+% ============================================================================
+\section{Analysis}
+\label{sec:analysis}
+
+% Placeholder for analysis.
+% Expected topics:
+% - Why does InfoNCE outperform MSE on the prefix? (collapse analysis)
+% - What does the CKA curve reveal about the prefix boundary?
+% - Does within-domain accuracy degrade? (shared vs single-domain)
+% - Failure modes: when does cross-domain matching fail?
+% - Qualitative examples of correct and incorrect cross-domain matches
+
+% ============================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{Relation to concurrent work.}
+TMRL \citep{tmrl2026} independently demonstrates that matryoshka prefix dimensions can be explicitly allocated for a specific functional purpose (temporal encoding). Our work and TMRL arrive at the same structural principle from different directions: TMRL from temporal information retrieval, and ours from cross-domain identity matching. Together they suggest that \emph{functional prefix allocation} may be a general-purpose extension of MRL beyond computational efficiency.
+
+\paragraph{Limitations.}
+Our benchmark uses synthetic data. While this gives us ground-truth identity labels that are impossible to obtain at scale with real data, synthetic profiles may not capture the full complexity of real human self-presentation. The dating and hiring templates, while diverse (16 total), are still templates. LLM-based paraphrasing \citep{dai2023auggpt} would improve naturalness.
+
+The base model (33M parameters) is deliberately small for rapid experimentation. Scaling to larger encoders (e.g., BGE-large, 335M) may change the relative performance of methods.
+
+We evaluate on two domains. Extending to three or more domains (e.g., dating, hiring, social media) would test whether the prefix can serve as a universal identity anchor.
+
+\paragraph{Broader impact.}
+Cross-domain identity matching raises privacy concerns: the ability to link someone's dating profile to their resume is precisely the kind of de-anonymization that users may not consent to. We emphasize that our benchmark is fully synthetic and that deployment of such technology on real data requires careful ethical consideration and consent frameworks.
+
+% ============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We introduced cross-domain text identity matching---retrieving the same person across semantically heterogeneous text domains---and proposed training the matryoshka embedding prefix with cross-domain InfoNCE to create a domain-invariant identity subspace within a single shared encoder. This combines established ideas (dimension-level functional partitioning from face recognition, matryoshka representation learning, contrastive domain alignment) in a new configuration for a new task. Our controlled comparison against six baselines isolates the contribution of each component.
+
+% ============================================================================
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
