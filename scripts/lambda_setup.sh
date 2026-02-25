@@ -17,6 +17,7 @@ echo "=========================================="
 # 1. Install dependencies
 echo ""
 echo "[1/4] Installing dependencies..."
+pip install --upgrade pip setuptools wheel
 pip install -e ".[dev]"
 
 # 2. Check GPU
