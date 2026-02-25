@@ -14,12 +14,17 @@ echo "=========================================="
 echo "  Shared Matryoshka — Lambda GPU Training"
 echo "=========================================="
 
-# 1. Create venv and install dependencies
+# 1. Create clean venv and install dependencies
 echo ""
-echo "[1/4] Setting up virtual environment and installing dependencies..."
-python3 -m venv .venv --system-site-packages
+echo "[1/4] Setting up clean virtual environment..."
+python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip setuptools wheel
+
+echo "Installing PyTorch with CUDA..."
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+echo "Installing project dependencies..."
 pip install -e ".[dev]"
 
 # 2. Check GPU
