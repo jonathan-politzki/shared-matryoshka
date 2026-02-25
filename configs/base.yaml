@@ -18,7 +18,7 @@ model:
   matryoshka_dims: [32, 64, 128, 256, 384]
 
 training:
-  epochs: 20
+  epochs: 10
   batch_size: 16
   lr: 2.0e-5
   weight_decay: 0.01
