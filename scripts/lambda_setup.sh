@@ -14,9 +14,11 @@ echo "=========================================="
 echo "  Shared Matryoshka — Lambda GPU Training"
 echo "=========================================="
 
-# 1. Install dependencies
+# 1. Create venv and install dependencies
 echo ""
-echo "[1/4] Installing dependencies..."
+echo "[1/4] Setting up virtual environment and installing dependencies..."
+python3 -m venv .venv --system-site-packages
+source .venv/bin/activate
 pip install --upgrade pip setuptools wheel
 pip install -e ".[dev]"
 
@@ -27,8 +29,9 @@ python -c "
 import torch
 if torch.cuda.is_available():
     gpu = torch.cuda.get_device_name(0)
-    mem = torch.cuda.get_device_properties(0).total_mem / 1e9
+    mem = torch.cuda.get_device_properties(0).total_memory / 1e9
     print(f'  GPU: {gpu} ({mem:.0f} GB)')
+    print(f'  GPUs available: {torch.cuda.device_count()}')
 else:
     print('  WARNING: No GPU detected!')
     exit(1)
@@ -41,7 +44,7 @@ python -m pytest tests/ -v --tb=short
 
 # 4. Run all experiments
 echo ""
-echo "[4/4] Running all 7 conditions (data → train → eval → table)..."
+echo "[4/4] Running all 7 conditions (data -> train -> eval -> table)..."
 echo ""
 python scripts/run_all.py
 
