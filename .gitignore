@@ -7,9 +7,9 @@ build/
 .eggs/
 
 # Data & outputs (regenerable)
-data/
-checkpoints/
-results/
+/data/
+/checkpoints/
+/results/
 
 # IDE
 .vscode/
