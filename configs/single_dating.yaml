@@ -1,0 +1,9 @@
+# Baseline: single-domain dating only
+name: single_dating
+method: single_dating
+seed: 42
+
+loss:
+  within_domain_weight: 1.0
+  cross_domain_weight: 0.0
+  prefix_weight: 0.0

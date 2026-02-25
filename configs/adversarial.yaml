@@ -1,0 +1,13 @@
+# Baseline: gradient reversal domain adaptation
+name: adversarial
+method: adversarial
+seed: 42
+
+model:
+  adversarial_hidden_dim: 128
+
+loss:
+  adversarial_weight: 0.1
+  grl_lambda: 1.0
+  within_domain_weight: 1.0
+  cross_domain_weight: 1.0

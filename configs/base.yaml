@@ -1,0 +1,33 @@
+# Shared defaults — all configs inherit these via Pydantic defaults.
+# This file exists for standalone data generation.
+name: base
+seed: 42
+
+data:
+  n_people: 1000
+  val_frac: 0.15
+  seed: 42
+  output_dir: data
+  triplets_per_domain: 5000
+  cross_domain_pairs: 5000
+
+model:
+  base_model: BAAI/bge-small-en-v1.5
+  embedding_dim: 384
+  prefix_dim: 64
+  matryoshka_dims: [32, 64, 128, 256, 384]
+
+training:
+  epochs: 20
+  batch_size: 64
+  lr: 2.0e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  max_grad_norm: 1.0
+  eval_every: 5
+  save_dir: checkpoints
+  log_every: 50
+
+eval:
+  recall_k: [1, 5, 10]
+  results_dir: results

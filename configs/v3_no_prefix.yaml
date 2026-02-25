@@ -1,0 +1,9 @@
+# Ablation: joint training, no prefix loss
+name: v3_no_prefix
+method: v3_no_prefix
+seed: 42
+
+loss:
+  prefix_weight: 0.0
+  within_domain_weight: 1.0
+  cross_domain_weight: 0.0

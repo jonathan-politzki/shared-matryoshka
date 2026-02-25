@@ -1,0 +1,13 @@
+# Baseline: shared backbone + identity/task projection heads
+name: projection_heads
+method: projection_heads
+seed: 42
+
+model:
+  identity_head_dim: 64
+
+loss:
+  temperature: 0.07
+  prefix_weight: 1.0
+  within_domain_weight: 1.0
+  cross_domain_weight: 1.0

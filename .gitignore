@@ -1,0 +1,32 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Data & outputs (regenerable)
+data/
+checkpoints/
+results/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Testing
+.pytest_cache/
+
+# Environment
+.env
+venv/
+env/
+
+# Logs & models
+*.log
+*.pt
+*.pth

@@ -1,0 +1,10 @@
+# Proposed method: shared matryoshka with InfoNCE prefix alignment
+name: v3_contrastive
+method: v3_contrastive
+seed: 42
+
+loss:
+  temperature: 0.07
+  prefix_weight: 1.0
+  within_domain_weight: 1.0
+  cross_domain_weight: 1.0

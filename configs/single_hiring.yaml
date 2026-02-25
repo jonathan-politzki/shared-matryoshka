@@ -1,0 +1,9 @@
+# Baseline: single-domain hiring only
+name: single_hiring
+method: single_hiring
+seed: 42
+
+loss:
+  within_domain_weight: 1.0
+  cross_domain_weight: 0.0
+  prefix_weight: 0.0

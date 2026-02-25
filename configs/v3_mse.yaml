@@ -1,0 +1,9 @@
+# Ablation: MSE prefix loss (expect collapse)
+name: v3_mse
+method: v3_mse
+seed: 42
+
+loss:
+  prefix_weight: 1.0
+  within_domain_weight: 1.0
+  cross_domain_weight: 1.0
