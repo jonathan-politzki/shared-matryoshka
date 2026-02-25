@@ -10,8 +10,9 @@ import torch.nn.functional as F
 class PrefixInfoNCE(nn.Module):
     """InfoNCE on prefix dimensions for cross-domain identity alignment.
 
-    Given anchor embeddings from domain A and positive/negative embeddings
-    from domain B, computes InfoNCE using only the first prefix_dim dimensions.
+    Uses in-batch negatives: for each (anchor_i, positive_i) pair,
+    all other positives in the batch serve as negatives.
+    Falls back to explicit negatives if provided.
     """
 
     def __init__(self, prefix_dim: int = 64, temperature: float = 0.07):
@@ -23,14 +24,15 @@ class PrefixInfoNCE(nn.Module):
         self,
         anchor: torch.Tensor,
         positive: torch.Tensor,
-        negatives: torch.Tensor,
+        negatives: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute prefix InfoNCE.
 
         Args:
             anchor: (B, D) embeddings from domain A.
             positive: (B, D) embeddings from domain B (same person).
-            negatives: (B, N, D) embeddings from domain B (different people).
+            negatives: Optional (B, N, D) explicit negatives. If None,
+                      uses in-batch negatives (more memory efficient).
 
         Returns:
             Scalar loss.
@@ -38,18 +40,20 @@ class PrefixInfoNCE(nn.Module):
         # Slice to prefix
         a = F.normalize(anchor[:, : self.prefix_dim], dim=-1)  # (B, K)
         p = F.normalize(positive[:, : self.prefix_dim], dim=-1)  # (B, K)
-        n = F.normalize(negatives[:, :, : self.prefix_dim], dim=-1)  # (B, N, K)
 
-        # Positive similarity
-        pos_sim = (a * p).sum(dim=-1, keepdim=True) / self.temperature  # (B, 1)
-
-        # Negative similarities
-        neg_sim = torch.bmm(n, a.unsqueeze(-1)).squeeze(-1) / self.temperature  # (B, N)
-
-        # InfoNCE
-        logits = torch.cat([pos_sim, neg_sim], dim=1)  # (B, 1+N)
-        labels = torch.zeros(anchor.size(0), dtype=torch.long, device=anchor.device)
-        return F.cross_entropy(logits, labels)
+        if negatives is not None:
+            # Explicit negatives path
+            n = F.normalize(negatives[:, :, : self.prefix_dim], dim=-1)  # (B, N, K)
+            pos_sim = (a * p).sum(dim=-1, keepdim=True) / self.temperature  # (B, 1)
+            neg_sim = torch.bmm(n, a.unsqueeze(-1)).squeeze(-1) / self.temperature  # (B, N)
+            logits = torch.cat([pos_sim, neg_sim], dim=1)  # (B, 1+N)
+            labels = torch.zeros(anchor.size(0), dtype=torch.long, device=anchor.device)
+            return F.cross_entropy(logits, labels)
+        else:
+            # In-batch negatives: sim(a_i, p_j) for all i,j; diagonal = positive
+            sim_matrix = torch.mm(a, p.t()) / self.temperature  # (B, B)
+            labels = torch.arange(a.size(0), device=a.device)
+            return F.cross_entropy(sim_matrix, labels)
 
 
 class PrefixMSE(nn.Module):

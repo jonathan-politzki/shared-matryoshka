@@ -184,23 +184,9 @@ class Trainer:
                 ca_emb = self._encode_with_grad(cross_batch["anchors"])
                 cp_emb = self._encode_with_grad(cross_batch["positives"])
 
-                # Stack negatives: each sample has a list of negatives
-                neg_lists = cross_batch["negatives_list"]
-                # Pad to same length and encode
-                max_negs = max(len(nl) for nl in neg_lists)
-                padded_negs = []
-                for nl in neg_lists:
-                    padded = nl + [nl[0]] * (max_negs - len(nl))  # pad with first neg
-                    padded_negs.append(padded)
-
-                # Flatten, encode, reshape
-                flat_negs = [t for sublist in padded_negs for t in sublist]
-                cn_emb = self._encode_with_grad(flat_negs)
-                cn_emb = cn_emb.view(len(neg_lists), max_negs, -1)
-
+                # Use in-batch negatives (memory efficient — no explicit neg encoding)
                 loss_inputs["cross_anchor"] = ca_emb
                 loss_inputs["cross_positive"] = cp_emb
-                loss_inputs["cross_negatives"] = cn_emb
 
                 # For adversarial: provide domain labels
                 if self.cfg.method == Method.ADVERSARIAL:
